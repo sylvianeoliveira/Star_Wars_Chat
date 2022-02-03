@@ -1,50 +1,69 @@
 import { Box, Text, TextField, Image, Button } from '@skynexui/components';
 import React from 'react';
 import appConfig from '../config.json';
+import { useRouter } from 'next/router';
 import { createClient } from '@supabase/supabase-js';
+import { ButtonSendSticker } from '../src/components/ButtonSendSticker';
 
 const SUPABASE_ANON_PUBLIC = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTY0Mzc3NDcwNiwiZXhwIjoxOTU5MzUwNzA2fQ.hTB8nYftqnTjCrJogGUElaNlWI5G_gNpsburmC0gaj0";
 const SUPABASE_URL = "https://tvqyooeucrfsdmoyldjk.supabase.co";
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_PUBLIC);
 
+function escutaMensagensEmTempoReal(adicionaMensagem) {
+    return supabaseClient
+        .from('mensagens')
+        .on('INSERT', (respostaLive) => {
+            adicionaMensagem(respostaLive.new);
+        })
+        .subscribe();
+}
 
 export default function ChatPage() {
-const [mensagem, setMensagem] = React.useState('');
-const [listaDeMensagens, setListaDeMensagens] = React.useState([]);
+    const roteamento = useRouter();
+    const usuarioLogado = roteamento.query.username;
+    const [mensagem, setMensagem] = React.useState('');
+    const [listaDeMensagens, setListaDeMensagens] = React.useState([]);
 
-React.useEffect(() =>{
-    supabaseClient
-        .from('mensagens')
-        .select('*')
-        .order('id', {ascending: false})
-        .then(({data}) => {
-            setListaDeMensagens(data);
-    });
-}, []);
+    React.useEffect(() => {
+        supabaseClient
+            .from('mensagens')
+            .select('*')
+            .order('id', { ascending: false })
+            .then(({ data }) => {
+                //setListaDeMensagens(data);
+            });
+
+        const subscription = escutaMensagensEmTempoReal((novaMensagem) => {
+            setListaDeMensagens((valorAtualDaLista) => {
+                return [
+                    novaMensagem,
+                    ...valorAtualDaLista,
+                ]
+            });
+        });
+
+        return () => {
+            subscription.unsubscribe();
+        }
+    }, []);
 
 
+    function handleNovaMensagem(novaMensagem) {
+        const mensagem = {
+            de: usuarioLogado,
+            texto: novaMensagem,
+        };
 
-function handleNovaMensagem(novaMensagem) {
-    const mensagem = {
-        //id: listaDeMensagens.length + 1,
-        de: 'sylvianeoliveira',
-        texto: novaMensagem,
-    };
+        supabaseClient
+            .from('mensagens')
+            .insert([
+                mensagem
+            ])
+            .then(({ data }) => {
+            });
 
-    supabaseClient
-    .from('mensagens')
-    .insert([
-        mensagem
-    ])
-    .then(({data}) =>{
-        setListaDeMensagens([
-            data[0],
-            ...listaDeMensagens,
-        ]);
-    })
-
-    setMensagem('');
-}
+        setMensagem('');
+    }
 
     return (
         <Box
@@ -102,11 +121,12 @@ function handleNovaMensagem(novaMensagem) {
                                 setMensagem(valor);
                             }}
                             onKeyPress={(event) => {
-                                if (event.key === 'Enter' ) {
+                                if (event.key === 'Enter') {
                                     event.preventDefault();
                                     handleNovaMensagem(mensagem);
                                 }
                             }}
+
 
                             placeholder="Insira sua mensagem aqui..."
                             type="textarea"
@@ -121,7 +141,12 @@ function handleNovaMensagem(novaMensagem) {
                                 color: appConfig.theme.colors.neutrals[200],
                             }}
                         />
-                        
+                        {/* CallBack */}
+                        <ButtonSendSticker
+                            onStickerClick={(sticker) => {
+                                handleNovaMensagem(`:sticker: ${sticker}`);
+                            }}
+                        />
                         <Button
                             type='submit'
                             label='Enviar'
@@ -156,10 +181,10 @@ function Header() {
         <>
             <Box styleSheet={{ width: '100%', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} >
                 <Text variant='heading4'
-                styleSheet={{
+                    styleSheet={{
                         color: appConfig.theme.colors.primary[800],
-                        
-                        }}
+
+                    }}
                 >
                     Star Wars Chat
                 </Text>
@@ -229,7 +254,17 @@ function MessageList(props) {
                                 {(new Date().toLocaleDateString())}
                             </Text>
                         </Box>
-                        {mensagem.texto}
+                        {mensagem.texto.startsWith(':sticker:') ?
+                            (
+                                <Image src={mensagem.texto.replace(':sticker:', '')}
+                                    styleSheet={{
+                                        width: '100px',
+                                        height: '100px',
+                                    }} />
+                            ) :
+                            (
+                                mensagem.texto
+                            )}
                     </Text>
                 );
             })}
